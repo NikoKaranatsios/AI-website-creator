@@ -1,7 +1,15 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
+import * as tf from '@tensorflow/tfjs';
 import * as use from '@tensorflow-models/universal-sentence-encoder';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+
+enum ComponentColors {
+  BLUE = 'bg-blue-500 hover:bg-blue-600',
+  RED = 'bg-red-500 hover:bg-red-600',
+  GREEN = 'bg-green-500 hover:bg-green-600',
+  YELLOW = 'bg-yellow-500 hover:bg-yellow-600',
+}
 
 interface TrainingPair {
   prompt: string;
@@ -21,6 +29,11 @@ export class TensorflowService implements OnModuleInit {
   private componentMap: Map<number, any> = new Map();
 
   async onModuleInit() {
+    // Initialize TensorFlow backend
+    await tf.setBackend('cpu');
+    await tf.ready();
+    console.log('TensorFlow backend initialized:', tf.getBackend());
+    
     await this.loadTrainingData();
     await this.initializeModel();
   }
@@ -79,30 +92,16 @@ export class TensorflowService implements OnModuleInit {
     };
   }
 
-  private cosineSimilarity(a: number[], b: number[]): number {
-    const dotProduct = a.reduce((sum, val, i) => sum + val * b[i], 0);
-    const magnitudeA = Math.sqrt(a.reduce((sum, val) => sum + val * val, 0));
-    const magnitudeB = Math.sqrt(b.reduce((sum, val) => sum + val * val, 0));
-    return dotProduct / (magnitudeA * magnitudeB);
-  }
-
   private customizeComponent(component: any, text: string): any {
     const customized = JSON.parse(JSON.stringify(component));
-
-    const colors = {
-      blue: 'bg-blue-500 hover:bg-blue-600',
-      red: 'bg-red-500 hover:bg-red-600',
-      green: 'bg-green-500 hover:bg-green-600',
-      yellow: 'bg-yellow-500 hover:bg-yellow-600',
-    };
 
     const textMatch = text.match(/["']([^"']+)["']/);
     if (textMatch && customized.children) {
       customized.children = [textMatch[1]];
     }
 
-    Object.entries(colors).forEach(([color, className]) => {
-      if (text.toLowerCase().includes(color)) {
+    Object.entries(ComponentColors).forEach(([color, className]) => {
+      if (text.toLowerCase().includes(color.toLowerCase())) {
         if (customized.props.className) {
           customized.props.className = customized.props.className.replace(
             /bg-\w+-500/g,
@@ -134,5 +133,12 @@ export class TensorflowService implements OnModuleInit {
       modelLoaded: !!this.useModel,
       trainingDataLoaded: this.trainingData.length > 0,
     };
+  }
+
+  private cosineSimilarity(a: number[], b: number[]): number {
+    const dotProduct = a.reduce((sum, val, i) => sum + val * b[i], 0);
+    const magnitudeA = Math.sqrt(a.reduce((sum, val) => sum + val * val, 0));
+    const magnitudeB = Math.sqrt(b.reduce((sum, val) => sum + val * val, 0));
+    return dotProduct / (magnitudeA * magnitudeB);
   }
 }
