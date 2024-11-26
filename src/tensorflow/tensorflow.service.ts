@@ -21,12 +21,18 @@ interface ProcessResult {
   similarity: number;
 }
 
+interface CachedData {
+  promptEmbeddings: number[][];
+  componentMap: { [key: string]: any };
+}
+
 @Injectable()
 export class TensorflowService implements OnModuleInit {
   private useModel: any;
   private trainingData: TrainingPair[] = [];
   private promptEmbeddings: number[][] = [];
   private componentMap: Map<number, any> = new Map();
+  private readonly CACHE_FILE = path.join(__dirname, '..', 'data', 'embeddings-cache.json');
 
   async onModuleInit() {
     // Initialize TensorFlow backend
@@ -52,18 +58,60 @@ export class TensorflowService implements OnModuleInit {
     }
   }
 
+  private async loadCache(): Promise<CachedData | null> {
+    try {
+      const cacheData = await fs.readFile(this.CACHE_FILE, 'utf8');
+      const parsed = JSON.parse(cacheData);
+      return {
+        promptEmbeddings: parsed.promptEmbeddings,
+        componentMap: parsed.componentMap
+      };
+    } catch (error) {
+      console.log('No cache found or error reading cache');
+      return null;
+    }
+  }
+
+  private async saveCache(): Promise<void> {
+    try {
+      const cacheData: CachedData = {
+        promptEmbeddings: this.promptEmbeddings,
+        componentMap: Object.fromEntries(this.componentMap)
+      };
+      await fs.writeFile(this.CACHE_FILE, JSON.stringify(cacheData), 'utf8');
+      console.log('Cache saved successfully');
+    } catch (error) {
+      console.error('Error saving cache:', error);
+    }
+  }
+
   private async initializeModel(): Promise<void> {
     try {
       this.useModel = await use.load();
       console.log('Universal Sentence Encoder loaded successfully');
 
-      const prompts = this.trainingData.map((pair) => pair.prompt);
-      const embeddings = await this.useModel.embed(prompts);
-      this.promptEmbeddings = await embeddings.array();
+      // Try to load from cache first
+      const cache = await this.loadCache();
+      
+      if (cache) {
+        console.log('Loading embeddings from cache');
+        this.promptEmbeddings = cache.promptEmbeddings;
+        this.componentMap = new Map(
+          Object.entries(cache.componentMap).map(([key, value]) => [Number(key), value])
+        );
+      } else {
+        console.log('Computing new embeddings');
+        const prompts = this.trainingData.map((pair) => pair.prompt);
+        const embeddings = await this.useModel.embed(prompts);
+        this.promptEmbeddings = await embeddings.array();
 
-      this.trainingData.forEach((pair, index) => {
-        this.componentMap.set(index, pair.component);
-      });
+        this.trainingData.forEach((pair, index) => {
+          this.componentMap.set(index, pair.component);
+        });
+
+        // Save the computed embeddings to cache
+        await this.saveCache();
+      }
 
       console.log('Training data processed successfully');
     } catch (error) {
