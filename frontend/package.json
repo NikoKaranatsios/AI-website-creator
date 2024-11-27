@@ -4,6 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "esModuleInterop": true,
+  "homepage": "https://nikokaranatsios.github.io/AI-website-creator/",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
